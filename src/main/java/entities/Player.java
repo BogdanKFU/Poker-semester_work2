@@ -3,14 +3,24 @@ package entities;
 public class Player {
     private String name = "";
     private Room room;
-    private Card first_card;
-    private Card second_card;
+    private Card first_card = null;
+    private Card second_card = null;
     private int money;
     private int bet = 0;
     private boolean turned = false;
     private Combination best_comb;
+    private boolean folded = false;
 
     public Player() {
+    }
+
+    public void refresh() {
+        folded = false;
+        first_card = null;
+        second_card = null;
+        bet = 0;
+        turned = false;
+        best_comb = null;
     }
 
     public String getName() {
@@ -44,6 +54,9 @@ public class Player {
     public void bet(int amount) throws Exception {
         if (money >= amount) {
             bet = amount;
+            if (bet > room.getGame().getMax()) {
+                room.getGame().setMax(bet);
+            }
             money -= amount;
         }
         else {
@@ -83,16 +96,29 @@ public class Player {
         money = 0;
     }
 
-    public void fold() {
+    public void fold() throws Exception {
         /*
         Сбросить карты
          */
+        if (!folded) {
+            room.getGame().getDiscarded().add(first_card);
+            room.getGame().getDiscarded().add(second_card);
+            first_card = null;
+            second_card = null;
+            folded = true;
+        }
+        else {
+            throw new Exception("You does not have any cards.");
+        }
     }
 
-    public void check() {
+    public void check() throws Exception {
         /*
         Оставить "как есть"
          */
+        if (bet != room.getGame().getMax() && money != 0) {
+            throw new Exception("Your bet is not enough to check. You can call, fold, raise or fold.");
+        }
     }
 
     public int getBet() {
@@ -125,5 +151,9 @@ public class Player {
 
     public Combination getBest_comb() {
         return best_comb;
+    }
+
+    public boolean isFolded() {
+        return folded;
     }
 }

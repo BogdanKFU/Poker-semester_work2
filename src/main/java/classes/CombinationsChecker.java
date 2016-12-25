@@ -37,32 +37,33 @@ public class CombinationsChecker {
     public static Stack<Connection> getWinner(Game game) {
         List<Connection> connections = game.getRoom().getConnections();
         List<Card> cards = game.getBoard();
-        for (Card card : cards) {
-            System.out.println(card.toString() + " BOARD");
-        }
         for (Connection conn : connections) {
-            cards.add(conn.getPlayer().getFirst_card());
-            cards.add(conn.getPlayer().getSecond_card());
-            List<Card> clone = new ArrayList<>();
-            clone.addAll(cards);
-            for (Card card : cards) {
-                System.out.println(card.toString());
+            if (!conn.getPlayer().isFolded()) {
+                cards.add(conn.getPlayer().getFirst_card());
+                cards.add(conn.getPlayer().getSecond_card());
+                List<Card> clone = new ArrayList<>();
+                clone.addAll(cards);
+                for (Card card : cards) {
+                    System.out.println(card.toString());
+                }
+                Combination comb = findHighestCombination(clone);
+                cards.remove(cards.size() - 1);
+                cards.remove(cards.size() - 1);
+                conn.getPlayer().setBest_comb(comb);
             }
-            Combination comb = findHighestCombination(clone);
-            cards.remove(cards.size() - 1);
-            cards.remove(cards.size() - 1);
-            conn.getPlayer().setBest_comb(comb);
         }
         int max = 0;
         Stack<Connection> winners = new Stack<>();
         for (Connection conn : connections) {
-            int priority = conn.getPlayer().getBest_comb().getCombination().getPriority();
-            if (priority > max) {
-                winners = new Stack<>();
-                winners.add(conn);
-                max = priority;
-            } else if (priority == max) {
-                winners.add(conn);
+            if (!conn.getPlayer().isFolded()) {
+                int priority = conn.getPlayer().getBest_comb().getCombination().getPriority();
+                if (priority > max) {
+                    winners = new Stack<>();
+                    winners.add(conn);
+                    max = priority;
+                } else if (priority == max) {
+                    winners.add(conn);
+                }
             }
         }
         Connection previous = winners.pop();

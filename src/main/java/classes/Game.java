@@ -23,11 +23,16 @@ public class Game implements Runnable {
     private Integer max = 0;
     private int starter;
     private List<Card> board = new ArrayList<>();
+    private Stack<Connection> winners = new Stack<>();
 
     public Game(Room room) {
         thread = new Thread(this);
         this.room = room;
         this.board = new ArrayList<>();
+    }
+
+    public void setMax(Integer max) {
+        this.max = max;
     }
 
     public void refresh(){
@@ -47,13 +52,20 @@ public class Game implements Runnable {
 
     public boolean check_bets() {
         List<Connection> connections = room.getConnections();
+        int i = 0;
         for (Connection conn: connections) {
             /*
             Здесь проверка на сброшенные карты. Если игрок сбросил карты - то уже с него ничего не возьмешь
              */
-            if (conn.getPlayer().getBet() < max && conn.getPlayer().getMoney() != 0) {
-                return false;
+            if (!conn.getPlayer().isFolded()) {
+                i++;
+                if (conn.getPlayer().getBet() < max && conn.getPlayer().getMoney() != 0) {
+                    return false;
+                }
             }
+        }
+        if (i == 1) {
+            event(5);
         }
         return true;
     };
@@ -61,68 +73,82 @@ public class Game implements Runnable {
     @Override
     public void run() {
         try {
-            List<Connection> connections = room.getConnections();
-            PrintWriter this_out;
-            for (int i = 0; i < 4; i++) {
-                for (Connection conn : connections) {
-                    this_out = new PrintWriter(conn.getSocket().getOutputStream(), true);
-                    if (i == 0) {
-                        this_out.println("Hi! One moment, please. The game will start after 3 seconds.");
+            while(room.hasParticipates()) {
+                List<Connection> connections = room.getConnections();
+                PrintWriter this_out;
+                for (int i = 0; i < 4; i++) {
+                    for (Connection conn : connections) {
+                        this_out = new PrintWriter(conn.getSocket().getOutputStream(), true);
+                        if (i == 0) {
+                            this_out.println("Hi! One moment, please. The game will start after 3 seconds.");
+                        } else {
+                            this_out.println(i);
+                        }
                     }
-                    else {
-                        this_out.println(i);
-                    }
+                    Thread.sleep(1000);
                 }
-                Thread.sleep(1000);
-            }
-            for (Connection conn: connections) {
-                conn.getPlayer().setMoney(10000);
-            }
-            refresh();
+                pot = 0;
+                for (Connection conn : connections) {
+                    conn.getPlayer().setMoney(10000);
+                    conn.getPlayer().refresh();
+                }
+                refresh();
             /*
             Пять кругов торгов
              */
-            for(int i = 0; i < 5; i++) {
+                for (int i = 0; i < 5 && winners.size() == 0; i++) {
                 /*
                 Торги
                  */
-                for(Connection conn: connections) {
-                    this_out = new PrintWriter(conn.getSocket().getOutputStream(), true);
-                    this_out.println("Hi!");
-                }
-                Player player = null;
+                    for (Connection conn : connections) {
+                        this_out = new PrintWriter(conn.getSocket().getOutputStream(), true);
+                        this_out.println("Hi!");
+                    }
+                    Player player = null;
                 /*
                 События
                  */
-                event(i);
-                if (starter != 0) {
-                    List<Connection> subList1 = connections.subList(starter, connections.size() - 1);
-                    List<Connection> subList2 = connections.subList(0, starter - 1);
-                    if (!ring(subList1)) return;
-                    if (!ring(subList2)) return;
-                }
-                else {
-                    if (!ring(connections)) return;
-                }
-                int k = starter;
-                while (!check_bets()) {
-                    if (k == connections.size()) {
-                        k = 0;
+                    event(i);
+                    if (starter != 0) {
+                        List<Connection> subList1 = connections.subList(starter, connections.size() - 1);
+                        List<Connection> subList2 = connections.subList(0, starter - 1);
+                        if (!ring(subList1)) return;
+                        if (!ring(subList2)) return;
+                    } else {
+                        if (!ring(connections)) return;
                     }
-                    Connection conn = connections.get(k);
-                    if (!turn(conn)) return;
-                    k++;
+                    int k = starter;
+                    while (!check_bets()) {
+                        if (k == connections.size()) {
+                            k = 0;
+                        }
+                        Connection conn = connections.get(k);
+                        if (!turn(conn)) return;
+                        k++;
+                    }
                 }
-            }
-            Stack<Connection> winners = CombinationsChecker.getWinner(this);
-            while (winners.size() > 0) {
-                Connection conn = winners.pop();
-                sendToOpponents("WINNERS: " + conn.getPlayer().getName(), connections.get(0));
-                sendToOpponents("THE COMBINATION IS " + conn.getPlayer().getBest_comb().getCombination().toString(), connections.get(0));
+                for (Connection conn: connections) {
+                    pot += conn.getPlayer().getBet();
+                }
+                if (winners.size() == 0) {
+                    this.winners = CombinationsChecker.getWinner(this);
+                    while (winners.size() > 0) {
+                        Connection conn = winners.pop();
+                        sendToOpponents("WINNERS: " + conn.getPlayer().getName(), null);
+                        sendToOpponents("THE COMBINATION IS " + conn.getPlayer().getBest_comb().getCombination().toString(), null);
+                        sendToOpponents("POT: " + pot, null);
+                    }
+                }
+                clear();
             }
         } catch (IOException | InterruptedException e) {
             e.printStackTrace();
         }
+    }
+
+    private void clear() {
+        Stack<Card> deck = room.getDeck();
+        deck.addAll(discarded);
     }
 
     public void play() {
@@ -143,12 +169,21 @@ public class Game implements Runnable {
 
     public void sendToOpponents(String string, Connection sender) {
         List<Connection> connections = room.getConnections();
-        try {for(Connection conn: connections) {
-            if (conn != sender) {
-                PrintWriter out = new PrintWriter(conn.getSocket().getOutputStream(), true);
-                out.println("Player " + sender.getPlayer().getName() + " " + string);
+        try {
+            if (sender != null) {
+                for (Connection conn : connections) {
+                    if (conn != sender) {
+                        PrintWriter out = new PrintWriter(conn.getSocket().getOutputStream(), true);
+                        out.println("Player " + sender.getPlayer().getName() + " " + string);
+                    }
+                }
             }
-        }
+            else {
+                for (Connection conn : connections) {
+                    PrintWriter out = new PrintWriter(conn.getSocket().getOutputStream(), true);
+                    out.println(string);
+                }
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -157,62 +192,79 @@ public class Game implements Runnable {
     public boolean turn(Connection conn) {
         try {
             Player player;
-            do {
-                BufferedReader in = new BufferedReader(new InputStreamReader(conn.getSocket().getInputStream()));
-                PrintWriter out = new PrintWriter(conn.getSocket().getOutputStream(), true);
-                String str = in.readLine();
-                Matcher mather = raise.matcher(str);
-                player = conn.getPlayer();
-                if (mather.matches()) {
-                    try {
-                        player.raise(Integer.valueOf(mather.group("amount")));
-                    } catch (Exception e) {
-                        out.println(e.toString());
-                    }
-                    sendToOpponents("raised for " + mather.group("amount"), conn);
-                    player.setTurned();
-                } else if (str.equals("call")) {
-                    try {
-                        player.call();
-                    } catch (Exception e) {
-                        out.println(e.toString());
-                    }
-                    sendToOpponents("called", conn);
-                    player.setTurned();
-                } else if (str.equals("check")) {
-                    player.check();
-                    sendToOpponents("checked", conn);
-                    player.setTurned();
-                } else if (str.equals("all-in")) {
-                    player.all_in();
-                    sendToOpponents("bet all", conn);
-                    player.setTurned();
-                } else if (str.equals("fold")) {
-                    player.fold();
-                    sendToOpponents("folded", conn);
-                    player.setTurned();
-                } else if (str.equals("exit from game")) {
-                    synchronized (conn.getInGame()) {
-                        List<Connection> connections = room.getConnections();
-                        int size = connections.size();
-                        room.remove_player(conn);
-                        conn.setInGame(false);
-                        conn.getInGame().notify();
-                        if (size < 2) {
-                            room.deleteGame();
-                            return false;
+            if (!conn.getPlayer().isFolded()) {
+                do {
+                    BufferedReader in = new BufferedReader(new InputStreamReader(conn.getSocket().getInputStream()));
+                    PrintWriter out = new PrintWriter(conn.getSocket().getOutputStream(), true);
+                    String str = in.readLine();
+                    Matcher mather = raise.matcher(str);
+                    player = conn.getPlayer();
+                    if (mather.matches()) {
+                        try {
+                            player.raise(Integer.valueOf(mather.group("amount")));
+                        } catch (Exception e) {
+                            out.println(e.toString());
+                        }
+                        sendToOpponents("raised for " + mather.group("amount"), conn);
+                        player.setTurned();
+                    } else if (str.equals("call")) {
+                        try {
+                            player.call();
+                        } catch (Exception e) {
+                            out.println(e.toString());
+                        }
+                        sendToOpponents("called", conn);
+                        player.setTurned();
+                    } else if (str.equals("check")) {
+                        try {
+                            player.check();
+                        } catch (Exception e) {
+                            out.println(e.toString());
+                        }
+                        sendToOpponents("checked", conn);
+                        player.setTurned();
+                    } else if (str.equals("all-in")) {
+                        player.all_in();
+                        sendToOpponents("bet all", conn);
+                        player.setTurned();
+                    } else if (str.equals("fold")) {
+                        try {
+                            player.fold();
+                        } catch (Exception e) {
+                            out.println(e.toString());
+                        }
+                        sendToOpponents("folded", conn);
+                        player.setTurned();
+                    } else if (str.equals("exit from game")) {
+                        if (!exit(conn)) {
+                            return exit(conn);
                         }
                         break;
+                    } else if (str.equals("get max")) {
+                        new PrintWriter(conn.getSocket().getOutputStream(), true).println(max);
+                    } else if (str.equals("get my bet")) {
+                        new PrintWriter(conn.getSocket().getOutputStream(), true).println(conn.getPlayer().getBet());
                     }
-                } else if (str.equals("get max")) {
-                    new PrintWriter(conn.getSocket().getOutputStream(), true).println(max);
-                } else if (str.equals("get my bet")) {
-                    new PrintWriter(conn.getSocket().getOutputStream(), true).println(conn.getPlayer().getBet());
                 }
+                while (!player.isTurned());
             }
-            while (!player.isTurned());
         } catch (IOException e) {
             e.printStackTrace();
+        }
+        return true;
+    }
+
+    public boolean exit(Connection conn) {
+        synchronized (conn.getInGame()) {
+            List<Connection> connections = room.getConnections();
+            int size = connections.size();
+            room.remove_player(conn);
+            conn.setInGame(false);
+            conn.getInGame().notify();
+            if (size < 2) {
+                room.deleteGame();
+                return false;
+            }
         }
         return true;
     }
@@ -324,6 +376,19 @@ public class Game implements Runnable {
                     e.printStackTrace();
                 }
                 break;
+            case 5:
+                List<Connection> connections = room.getConnections();
+                for (Connection conn: connections) {
+                    pot += conn.getPlayer().getBet();
+                }
+                for (Connection conn: connections) {
+                    if (!conn.getPlayer().isFolded()) {
+                        winners.add(conn);
+                        sendToOpponents("WINNER: " + conn.getPlayer().getName() +
+                                " ALL OTHER PLAYER FOLDED THEIR CARDS." +
+                                "POT: " + pot, null);
+                    }
+                }
             default:
                 break;
         }
@@ -335,5 +400,9 @@ public class Game implements Runnable {
 
     public Room getRoom() {
         return room;
+    }
+
+    public Stack<Card> getDiscarded() {
+        return discarded;
     }
 }

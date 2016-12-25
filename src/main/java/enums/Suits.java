@@ -1,15 +1,15 @@
 package enums;
 
 public enum Suits {
-    HEART('\u2764'), DIAMOND('\u2666'), CLUB('\u2663'), SPADE('\u2660');
+    HEART("♥"), DIAMOND("♦"), CLUB("♣"), SPADE("♠");
 
-    private final char suit;
+    private final String suit;
 
-    Suits(char suit) {
+    Suits(String suit) {
         this.suit = suit;
     }
 
-    public char getSuit() {
+    public String getSuit() {
         return suit;
     }
 }

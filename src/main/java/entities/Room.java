@@ -71,4 +71,8 @@ public class Room {
     public void deleteGame() {
         this.game = null;
     }
+
+    public boolean hasParticipates() {
+        return connections.size() > 0;
+    }
 }

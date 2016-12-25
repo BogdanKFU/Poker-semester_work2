@@ -44,7 +44,7 @@ public class Connection implements Runnable {
             PrintWriter this_out = new PrintWriter(socket.getOutputStream(), true);
             this_out.println("Hello! Please type your name:");
             String name = in.readLine();
-            this_out.println("Hi, " + name + "! Welcome to Poker classes.Game! There is menu: help, rooms, startgame <room_id>. " +
+            this_out.println("Hi, " + name + "! Welcome to Poker Game! There is menu: help, rooms, startgame <room_id>. " +
                     "Please type your command");
             player = new Player();
             player.setName(name);
@@ -59,7 +59,6 @@ public class Connection implements Runnable {
                 /*
                 Проверка: клиент в игре?
                  */
-                this_out.println("HELLO!");
                 if (!inGame) {
                     if (string.equals("exit")) {
                         String s = "Player id=" + Integer.toString(id) + " exited";
@@ -82,7 +81,7 @@ public class Connection implements Runnable {
                             }
                         }
                         catch (IndexOutOfBoundsException e) {
-                            this_out.println("main.java.ru.kpfu.itis.group11501.popov.entities.Room didn't found");
+                            this_out.println("Room didn't found");
                         } catch (InterruptedException e) {
                             e.printStackTrace();
                         }
@@ -101,11 +100,6 @@ public class Connection implements Runnable {
                             }
                         }
                     }
-                }
-                else {
-                    /*
-                    Тут распознавание команд для main.java.ru.kpfu.itis.group11501.popov.entities.Room
-                     */
                 }
             }
         }
